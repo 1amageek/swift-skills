@@ -1,0 +1,27 @@
+# macOS
+.DS_Store
+
+# Swift Package Manager
+/.build
+/Packages
+Package.resolved
+
+# Xcode
+xcuserdata/
+DerivedData/
+*.xcodeproj/
+!*.xcodeproj/project.pbxproj
+*.xcworkspace/
+!*.xcworkspace/contents.xcworkspacedata
+
+# SwiftPM Xcode integration
+.swiftpm/configuration/registries.json
+.swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
+.swiftpm/xcode/package.xcworkspace/xcshareddata/
+.swiftpm/xcode/xcuserdata/
+
+# Credentials
+.netrc
+
+# Claude Code
+.claude/

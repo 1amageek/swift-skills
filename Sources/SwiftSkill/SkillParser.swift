@@ -1,0 +1,214 @@
+import Foundation
+import Yams
+
+/// Parses SKILL.md files and skill directories into `Skill` instances.
+public struct SkillParser: Sendable {
+
+    public init() {}
+
+    // MARK: - Public API
+
+    /// Parse a SKILL.md content string.
+    public func parse(_ content: String) throws -> Skill {
+        let (frontmatterYAML, body) = try splitFrontmatterAndBody(content)
+        let dict = try parseFrontmatter(frontmatterYAML)
+        return try extractSkill(from: dict, body: body)
+    }
+
+    /// Parse a SKILL.md file at the given URL.
+    public func parse(at url: URL) throws -> Skill {
+        guard FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) else {
+            throw SkillParserError.fileNotFound(url)
+        }
+        let data = try Data(contentsOf: url)
+        guard let content = String(data: data, encoding: .utf8) else {
+            throw SkillParserError.invalidEncoding
+        }
+        return try parse(content)
+    }
+
+    /// Parse a full skill directory (SKILL.md + supporting files + optional codex config).
+    public func parseDirectory(at url: URL) throws -> Skill {
+        let skillMDURL = url.appending(path: "SKILL.md")
+        var skill = try parse(at: skillMDURL)
+
+        // Collect supporting files
+        skill.supportingFiles = try collectSupportingFiles(in: url)
+
+        // Parse Codex configuration if present
+        let codexYAMLURL = url.appending(path: "agents/openai.yaml")
+        if FileManager.default.fileExists(atPath: codexYAMLURL.path(percentEncoded: false)) {
+            skill.codexConfiguration = try parseCodexConfiguration(at: codexYAMLURL)
+        }
+
+        return skill
+    }
+
+    // MARK: - Frontmatter splitting
+
+    private func splitFrontmatterAndBody(_ content: String) throws -> (String, String) {
+        let lines = content.components(separatedBy: "\n")
+        guard !lines.isEmpty,
+              lines[0].trimmingCharacters(in: .whitespaces) == "---" else {
+            throw SkillParserError.missingFrontmatter
+        }
+
+        var closingIndex: Int?
+        for i in 1..<lines.count {
+            if lines[i].trimmingCharacters(in: .whitespaces) == "---" {
+                closingIndex = i
+                break
+            }
+        }
+
+        guard let closing = closingIndex else {
+            throw SkillParserError.missingFrontmatter
+        }
+
+        let frontmatter = lines[1..<closing].joined(separator: "\n")
+        let body = lines[(closing + 1)...].joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (frontmatter, body)
+    }
+
+    // MARK: - YAML parsing
+
+    private func parseFrontmatter(_ yaml: String) throws -> [String: Any] {
+        do {
+            guard let result = try Yams.load(yaml: yaml) as? [String: Any] else {
+                throw SkillParserError.invalidFrontmatter("Expected a YAML mapping")
+            }
+            return result
+        } catch let error as SkillParserError {
+            throw error
+        } catch {
+            throw SkillParserError.invalidFrontmatter(error.localizedDescription)
+        }
+    }
+
+    // MARK: - Field extraction
+
+    private static let standardKeys: Set<String> = [
+        "name", "description", "license", "compatibility", "metadata", "allowed-tools",
+    ]
+
+    private func extractSkill(from dict: [String: Any], body: String) throws -> Skill {
+        guard let name = dict["name"] as? String else {
+            throw SkillParserError.missingRequiredField("name")
+        }
+        guard let description = dict["description"] as? String else {
+            throw SkillParserError.missingRequiredField("description")
+        }
+
+        let license = dict["license"] as? String
+        let compatibility = dict["compatibility"] as? String
+
+        let metadata: [String: String]?
+        if let raw = dict["metadata"] as? [String: Any] {
+            metadata = raw.mapValues { "\($0)" }
+        } else {
+            metadata = nil
+        }
+
+        let allowedTools: [String]?
+        if let toolsString = dict["allowed-tools"] as? String {
+            allowedTools = parseAllowedToolsString(toolsString)
+        } else if let toolsArray = dict["allowed-tools"] as? [String] {
+            allowedTools = toolsArray
+        } else {
+            allowedTools = nil
+        }
+
+        // Remaining keys go to extensions
+        var extensions: [String: SkillValue] = [:]
+        for (key, value) in dict where !Self.standardKeys.contains(key) {
+            extensions[key] = SkillValue(fromAny: value)
+        }
+
+        return Skill(
+            name: name,
+            description: description,
+            license: license,
+            compatibility: compatibility,
+            metadata: metadata,
+            allowedTools: allowedTools,
+            body: body,
+            extensions: extensions
+        )
+    }
+
+    // MARK: - allowed-tools parsing
+
+    /// Parse allowed-tools string handling both comma-separated and space-separated formats.
+    private func parseAllowedToolsString(_ value: String) -> [String] {
+        if value.contains(",") {
+            return value.components(separatedBy: ",")
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+        }
+        // Split by space, respecting parentheses
+        var tools: [String] = []
+        var current = ""
+        var depth = 0
+        for char in value {
+            if char == "(" { depth += 1 }
+            if char == ")" { depth = max(0, depth - 1) }
+            if char == " " && depth == 0 {
+                if !current.isEmpty { tools.append(current) }
+                current = ""
+            } else {
+                current.append(char)
+            }
+        }
+        if !current.isEmpty { tools.append(current) }
+        return tools
+    }
+
+    // MARK: - Supporting files
+
+    private func collectSupportingFiles(in directoryURL: URL) throws -> [SupportingFile] {
+        let fm = FileManager.default
+        let dirPath = directoryURL.path(percentEncoded: false)
+        guard let enumerator = fm.enumerator(atPath: dirPath) else { return [] }
+
+        var files: [SupportingFile] = []
+        let skipNames: Set<String> = ["SKILL.md"]
+        let skipDirs: Set<String> = [".git", ".DS_Store"]
+        // Codex config is handled separately, not as a supporting file
+        let skipPaths: Set<String> = ["agents/openai.yaml"]
+
+        while let relativePath = enumerator.nextObject() as? String {
+            let fullURL = directoryURL.appending(path: relativePath)
+            let fullPath = fullURL.path(percentEncoded: false)
+
+            // Skip SKILL.md, system files, and Codex config
+            let fileName = (relativePath as NSString).lastPathComponent
+            if skipNames.contains(fileName) || skipDirs.contains(fileName) { continue }
+            if skipPaths.contains(relativePath) { continue }
+
+            var isDir: ObjCBool = false
+            guard fm.fileExists(atPath: fullPath, isDirectory: &isDir), !isDir.boolValue else {
+                continue
+            }
+
+            let data = try Data(contentsOf: fullURL)
+            files.append(SupportingFile(relativePath: relativePath, content: data))
+        }
+        return files
+    }
+
+    // MARK: - Codex configuration
+
+    private func parseCodexConfiguration(at url: URL) throws -> CodexConfiguration {
+        let data = try Data(contentsOf: url)
+        guard let yamlString = String(data: data, encoding: .utf8) else {
+            throw SkillParserError.invalidEncoding
+        }
+        do {
+            let decoder = YAMLDecoder()
+            return try decoder.decode(CodexConfiguration.self, from: yamlString)
+        } catch {
+            throw SkillParserError.invalidFrontmatter("Invalid Codex configuration: \(error.localizedDescription)")
+        }
+    }
+}
