@@ -15,7 +15,7 @@ Add to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/1amageek/SwiftSkill.git", from: "0.1.0")
+    .package(url: "https://github.com/1amageek/swift-skills.git", from: "0.1.0")
 ]
 ```
 
