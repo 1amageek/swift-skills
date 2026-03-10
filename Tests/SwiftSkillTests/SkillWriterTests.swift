@@ -151,14 +151,11 @@ struct SkillWriterTests {
             .appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
-        let skill = Skill(
-            name: "codex-write",
-            description: "Codex write test",
-            codexConfiguration: CodexConfiguration(
-                interface: CodexConfiguration.Interface(displayName: "My Skill"),
-                policy: CodexConfiguration.Policy(allowImplicitInvocation: false)
-            )
-        )
+        var skill = Skill(name: "codex-write", description: "Codex write test")
+        try skill.setConfiguration(CodexConfiguration(
+            interface: CodexConfiguration.Interface(displayName: "My Skill"),
+            policy: CodexConfiguration.Policy(allowImplicitInvocation: false)
+        ))
 
         try writer.writeDirectory(skill, to: tempDir)
 
@@ -172,22 +169,22 @@ struct SkillWriterTests {
             .appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
-        let original = Skill(
+        var original = Skill(
             name: "full-rt",
             description: "Full directory round-trip",
             license: "MIT",
             body: "Do stuff.",
             supportingFiles: [
                 SupportingFile(relativePath: "scripts/run.sh", text: "#!/bin/bash\necho hi"),
-            ],
-            codexConfiguration: CodexConfiguration(
-                interface: CodexConfiguration.Interface(
-                    displayName: "Full RT",
-                    brandColor: "#FF0000"
-                ),
-                policy: CodexConfiguration.Policy(allowImplicitInvocation: true)
-            )
+            ]
         )
+        try original.setConfiguration(CodexConfiguration(
+            interface: CodexConfiguration.Interface(
+                displayName: "Full RT",
+                brandColor: "#FF0000"
+            ),
+            policy: CodexConfiguration.Policy(allowImplicitInvocation: true)
+        ))
 
         try writer.writeDirectory(original, to: tempDir)
         let restored = try parser.parseDirectory(at: tempDir)
@@ -198,7 +195,8 @@ struct SkillWriterTests {
         #expect(restored.body == original.body)
         #expect(restored.supportingFiles.count == 1)
         #expect(restored.supportingFiles.first?.relativePath == "scripts/run.sh")
-        #expect(restored.codexConfiguration?.interface?.displayName == "Full RT")
-        #expect(restored.codexConfiguration?.policy?.allowImplicitInvocation == true)
+        let codex = try restored.configuration(CodexConfiguration.self)
+        #expect(codex?.interface?.displayName == "Full RT")
+        #expect(codex?.policy?.allowImplicitInvocation == true)
     }
 }

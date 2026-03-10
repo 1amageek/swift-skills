@@ -1,7 +1,20 @@
 import Foundation
+import Yams
 
-/// OpenAI Codex-specific configuration parsed from agents/openai.yaml.
-public struct CodexConfiguration: Sendable, Hashable, Codable {
+/// OpenAI Codex-specific configuration parsed from `agents/openai.yaml`.
+public struct CodexConfiguration: ConfigurationRepresentable {
+
+    public init(configurationData data: Data) throws {
+        guard let yaml = String(data: data, encoding: .utf8) else {
+            throw SkillParserError.invalidEncoding
+        }
+        self = try YAMLDecoder().decode(CodexConfiguration.self, from: yaml)
+    }
+
+    public func configurationData() throws -> Data {
+        let yaml = try YAMLEncoder().encode(self)
+        return Data(yaml.utf8)
+    }
 
     /// UI display settings for the skill.
     public struct Interface: Sendable, Hashable, Codable {

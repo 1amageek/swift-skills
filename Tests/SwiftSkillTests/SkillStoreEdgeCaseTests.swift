@@ -168,18 +168,16 @@ struct SkillStoreEdgeCaseTests {
         defer { try? FileManager.default.removeItem(at: dir) }
 
         let store = SkillStore(rootURL: dir)
-        let skill = Skill(
-            name: "codex-store",
-            description: "Codex store test",
-            codexConfiguration: CodexConfiguration(
-                interface: CodexConfiguration.Interface(displayName: "Stored Skill"),
-                policy: CodexConfiguration.Policy(allowImplicitInvocation: false)
-            )
-        )
+        var skill = Skill(name: "codex-store", description: "Codex store test")
+        try skill.setConfiguration(CodexConfiguration(
+            interface: CodexConfiguration.Interface(displayName: "Stored Skill"),
+            policy: CodexConfiguration.Policy(allowImplicitInvocation: false)
+        ))
         try store.save(skill)
 
         let loaded = try store.skill(named: "codex-store")
-        #expect(loaded?.codexConfiguration?.interface?.displayName == "Stored Skill")
-        #expect(loaded?.codexConfiguration?.policy?.allowImplicitInvocation == false)
+        let codex = try loaded?.configuration(CodexConfiguration.self)
+        #expect(codex?.interface?.displayName == "Stored Skill")
+        #expect(codex?.policy?.allowImplicitInvocation == false)
     }
 }

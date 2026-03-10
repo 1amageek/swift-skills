@@ -4,29 +4,49 @@ extension Skill {
 
     /// Whether the skill allows implicit (automatic) invocation by Codex.
     public var allowImplicitInvocation: Bool? {
-        get { codexConfiguration?.policy?.allowImplicitInvocation }
+        get {
+            do {
+                return try configuration(CodexConfiguration.self)?.policy?.allowImplicitInvocation
+            } catch {
+                assertionFailure("Corrupted CodexConfiguration: \(error)")
+                return nil
+            }
+        }
         set {
-            if codexConfiguration == nil {
-                codexConfiguration = CodexConfiguration()
+            do {
+                var config = (try configuration(CodexConfiguration.self)) ?? CodexConfiguration()
+                if config.policy == nil {
+                    config.policy = CodexConfiguration.Policy()
+                }
+                config.policy?.allowImplicitInvocation = newValue
+                try setConfiguration(config)
+            } catch {
+                assertionFailure("Failed to update CodexConfiguration: \(error)")
             }
-            if codexConfiguration?.policy == nil {
-                codexConfiguration?.policy = CodexConfiguration.Policy()
-            }
-            codexConfiguration?.policy?.allowImplicitInvocation = newValue
         }
     }
 
     /// Display name from Codex interface configuration.
     public var codexDisplayName: String? {
-        get { codexConfiguration?.interface?.displayName }
+        get {
+            do {
+                return try configuration(CodexConfiguration.self)?.interface?.displayName
+            } catch {
+                assertionFailure("Corrupted CodexConfiguration: \(error)")
+                return nil
+            }
+        }
         set {
-            if codexConfiguration == nil {
-                codexConfiguration = CodexConfiguration()
+            do {
+                var config = (try configuration(CodexConfiguration.self)) ?? CodexConfiguration()
+                if config.interface == nil {
+                    config.interface = CodexConfiguration.Interface()
+                }
+                config.interface?.displayName = newValue
+                try setConfiguration(config)
+            } catch {
+                assertionFailure("Failed to update CodexConfiguration: \(error)")
             }
-            if codexConfiguration?.interface == nil {
-                codexConfiguration?.interface = CodexConfiguration.Interface()
-            }
-            codexConfiguration?.interface?.displayName = newValue
         }
     }
 }

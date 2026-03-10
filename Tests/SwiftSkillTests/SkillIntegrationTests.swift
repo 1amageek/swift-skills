@@ -139,15 +139,16 @@ struct SkillIntegrationTests {
         try store.save(claudeSkill)
 
         // Codex skill
-        try store.save(Skill(
+        var codexSkill = Skill(
             name: "codex-skill",
             description: "Codex skill",
-            body: "Run codex tasks.",
-            codexConfiguration: CodexConfiguration(
-                interface: CodexConfiguration.Interface(displayName: "Codex Skill"),
-                policy: CodexConfiguration.Policy(allowImplicitInvocation: false)
-            )
+            body: "Run codex tasks."
+        )
+        try codexSkill.setConfiguration(CodexConfiguration(
+            interface: CodexConfiguration.Interface(displayName: "Codex Skill"),
+            policy: CodexConfiguration.Policy(allowImplicitInvocation: false)
         ))
+        try store.save(codexSkill)
 
         // Discover all
         let skills = try store.discover()
@@ -157,7 +158,7 @@ struct SkillIntegrationTests {
         let standard = skills.first { $0.name == "standard-skill" }
         #expect(standard?.license == "MIT")
         #expect(standard?.extensions.isEmpty == true)
-        #expect(standard?.codexConfiguration == nil)
+        #expect(standard?.configurations.isEmpty == true)
 
         let claude = skills.first { $0.name == "claude-skill" }
         #expect(claude?.disableModelInvocation == true)
@@ -165,8 +166,9 @@ struct SkillIntegrationTests {
         #expect(claude?.agent == "Explore")
 
         let codex = skills.first { $0.name == "codex-skill" }
-        #expect(codex?.codexConfiguration?.interface?.displayName == "Codex Skill")
-        #expect(codex?.codexConfiguration?.policy?.allowImplicitInvocation == false)
+        let codexConfig = try codex?.configuration(CodexConfiguration.self)
+        #expect(codexConfig?.interface?.displayName == "Codex Skill")
+        #expect(codexConfig?.policy?.allowImplicitInvocation == false)
     }
 
     // MARK: - Skill with complete supporting files

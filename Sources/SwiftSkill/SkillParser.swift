@@ -4,6 +4,9 @@ import Yams
 /// Parses SKILL.md files and skill directories into `Skill` instances.
 public struct SkillParser: Sendable {
 
+    /// Default configuration file mappings for parsing directories.
+    public static let defaultConfigurationMappings: [ConfigurationFileMapping] = ConfigurationFileMapping.defaults
+
     public init() {}
 
     // MARK: - Public API
@@ -27,18 +30,30 @@ public struct SkillParser: Sendable {
         return try parse(content)
     }
 
-    /// Parse a full skill directory (SKILL.md + supporting files + optional codex config).
-    public func parseDirectory(at url: URL) throws -> Skill {
+    /// Parse a full skill directory (SKILL.md + supporting files + configurations).
+    ///
+    /// Configuration files are discovered using the provided mappings and stored
+    /// as raw data in ``Skill/configurations``, keyed by the mapping's ``ConfigurationFileMapping/key``.
+    /// Use ``Skill/configuration(_:)`` to decode them into typed representations.
+    public func parseDirectory(
+        at url: URL,
+        configurationMappings: [ConfigurationFileMapping] = SkillParser.defaultConfigurationMappings
+    ) throws -> Skill {
         let skillMDURL = url.appending(path: "SKILL.md")
         var skill = try parse(at: skillMDURL)
 
-        // Collect supporting files
-        skill.supportingFiles = try collectSupportingFiles(in: url)
+        let configPaths = Set(configurationMappings.map(\.relativePath))
 
-        // Parse Codex configuration if present
-        let codexYAMLURL = url.appending(path: "agents/openai.yaml")
-        if FileManager.default.fileExists(atPath: codexYAMLURL.path(percentEncoded: false)) {
-            skill.codexConfiguration = try parseCodexConfiguration(at: codexYAMLURL)
+        // Collect supporting files, excluding configuration file paths
+        skill.supportingFiles = try collectSupportingFiles(in: url, excludingPaths: configPaths)
+
+        // Collect configurations as raw data, keyed by mapping key
+        for mapping in configurationMappings {
+            let configURL = url.appending(path: mapping.relativePath)
+            if FileManager.default.fileExists(atPath: configURL.path(percentEncoded: false)) {
+                let data = try Data(contentsOf: configURL)
+                skill.configurations[mapping.key] = data
+            }
         }
 
         return skill
@@ -166,7 +181,10 @@ public struct SkillParser: Sendable {
 
     // MARK: - Supporting files
 
-    private func collectSupportingFiles(in directoryURL: URL) throws -> [SupportingFile] {
+    private func collectSupportingFiles(
+        in directoryURL: URL,
+        excludingPaths configPaths: Set<String>
+    ) throws -> [SupportingFile] {
         let fm = FileManager.default
         let dirPath = directoryURL.path(percentEncoded: false)
         guard let enumerator = fm.enumerator(atPath: dirPath) else { return [] }
@@ -174,17 +192,14 @@ public struct SkillParser: Sendable {
         var files: [SupportingFile] = []
         let skipNames: Set<String> = ["SKILL.md"]
         let skipDirs: Set<String> = [".git", ".DS_Store"]
-        // Codex config is handled separately, not as a supporting file
-        let skipPaths: Set<String> = ["agents/openai.yaml"]
 
         while let relativePath = enumerator.nextObject() as? String {
             let fullURL = directoryURL.appending(path: relativePath)
             let fullPath = fullURL.path(percentEncoded: false)
 
-            // Skip SKILL.md, system files, and Codex config
             let fileName = (relativePath as NSString).lastPathComponent
             if skipNames.contains(fileName) || skipDirs.contains(fileName) { continue }
-            if skipPaths.contains(relativePath) { continue }
+            if configPaths.contains(relativePath) { continue }
 
             var isDir: ObjCBool = false
             guard fm.fileExists(atPath: fullPath, isDirectory: &isDir), !isDir.boolValue else {
@@ -195,20 +210,5 @@ public struct SkillParser: Sendable {
             files.append(SupportingFile(relativePath: relativePath, content: data))
         }
         return files
-    }
-
-    // MARK: - Codex configuration
-
-    private func parseCodexConfiguration(at url: URL) throws -> CodexConfiguration {
-        let data = try Data(contentsOf: url)
-        guard let yamlString = String(data: data, encoding: .utf8) else {
-            throw SkillParserError.invalidEncoding
-        }
-        do {
-            let decoder = YAMLDecoder()
-            return try decoder.decode(CodexConfiguration.self, from: yamlString)
-        } catch {
-            throw SkillParserError.invalidFrontmatter("Invalid Codex configuration: \(error.localizedDescription)")
-        }
     }
 }

@@ -103,25 +103,23 @@ struct SkillTests {
         #expect(restored.supportingFiles.first?.textContent == "echo hi")
     }
 
-    @Test("Skill JSON round-trip preserves Codex configuration")
-    func jsonRoundTripCodex() throws {
-        let original = Skill(
-            name: "codex-json",
-            description: "Codex test",
-            codexConfiguration: CodexConfiguration(
-                interface: CodexConfiguration.Interface(
-                    displayName: "My Skill",
-                    brandColor: "#3B82F6"
-                ),
-                policy: CodexConfiguration.Policy(allowImplicitInvocation: false)
-            )
-        )
+    @Test("Skill JSON round-trip preserves configurations")
+    func jsonRoundTripConfigurations() throws {
+        var original = Skill(name: "codex-json", description: "Codex test")
+        try original.setConfiguration(CodexConfiguration(
+            interface: CodexConfiguration.Interface(
+                displayName: "My Skill",
+                brandColor: "#3B82F6"
+            ),
+            policy: CodexConfiguration.Policy(allowImplicitInvocation: false)
+        ))
         let data = try JSONEncoder().encode(original)
         let restored = try JSONDecoder().decode(Skill.self, from: data)
 
-        #expect(restored.codexConfiguration?.interface?.displayName == "My Skill")
-        #expect(restored.codexConfiguration?.interface?.brandColor == "#3B82F6")
-        #expect(restored.codexConfiguration?.policy?.allowImplicitInvocation == false)
+        let codex = try restored.configuration(CodexConfiguration.self)
+        #expect(codex?.interface?.displayName == "My Skill")
+        #expect(codex?.interface?.brandColor == "#3B82F6")
+        #expect(codex?.policy?.allowImplicitInvocation == false)
     }
 
     // MARK: - Claude Code properties
@@ -172,8 +170,8 @@ struct SkillTests {
 
     // MARK: - Codex properties
 
-    @Test("Codex properties read from and write to codexConfiguration")
-    func codexProperties() {
+    @Test("Codex properties read from and write to configuration")
+    func codexProperties() throws {
         var skill = Skill(name: "codex", description: "Test")
 
         #expect(skill.allowImplicitInvocation == nil)
@@ -184,17 +182,18 @@ struct SkillTests {
 
         #expect(skill.allowImplicitInvocation == false)
         #expect(skill.codexDisplayName == "Pretty Name")
-        #expect(skill.codexConfiguration != nil)
+        #expect(skill.hasConfiguration(CodexConfiguration.self))
     }
 
     @Test("Codex property setter creates configuration lazily")
-    func codexLazyCreation() {
+    func codexLazyCreation() throws {
         var skill = Skill(name: "lazy-codex", description: "Test")
-        #expect(skill.codexConfiguration == nil)
+        #expect(!skill.hasConfiguration(CodexConfiguration.self))
 
         skill.allowImplicitInvocation = true
-        #expect(skill.codexConfiguration != nil)
-        #expect(skill.codexConfiguration?.policy?.allowImplicitInvocation == true)
+        #expect(skill.hasConfiguration(CodexConfiguration.self))
+        let codex = try skill.configuration(CodexConfiguration.self)
+        #expect(codex?.policy?.allowImplicitInvocation == true)
     }
 
     // MARK: - Default values
@@ -209,6 +208,6 @@ struct SkillTests {
         #expect(skill.body.isEmpty)
         #expect(skill.extensions.isEmpty)
         #expect(skill.supportingFiles.isEmpty)
-        #expect(skill.codexConfiguration == nil)
+        #expect(skill.configurations.isEmpty)
     }
 }

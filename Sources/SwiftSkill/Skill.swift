@@ -37,8 +37,6 @@ public struct Skill: Sendable, Hashable, Identifiable, Codable {
     // MARK: - Extensions
 
     /// Provider-specific frontmatter fields not covered by the standard.
-    /// Claude Code fields: disable-model-invocation, user-invocable, model, context, agent, argument-hint, hooks.
-    /// Codex fields are stored in `codexConfiguration`.
     public var extensions: [String: SkillValue]
 
     // MARK: - Supporting files
@@ -46,10 +44,10 @@ public struct Skill: Sendable, Hashable, Identifiable, Codable {
     /// Files bundled with the skill (scripts/, references/, assets/).
     public var supportingFiles: [SupportingFile]
 
-    // MARK: - OpenAI Codex configuration
+    // MARK: - Provider configurations
 
-    /// Configuration parsed from agents/openai.yaml when present.
-    public var codexConfiguration: CodexConfiguration?
+    /// Provider-specific configurations keyed by an opaque identifier.
+    public var configurations: [String: Data]
 
     public init(
         name: String,
@@ -61,7 +59,7 @@ public struct Skill: Sendable, Hashable, Identifiable, Codable {
         body: String = "",
         extensions: [String: SkillValue] = [:],
         supportingFiles: [SupportingFile] = [],
-        codexConfiguration: CodexConfiguration? = nil
+        configurations: [String: Data] = [:]
     ) {
         self.name = name
         self.description = description
@@ -72,6 +70,30 @@ public struct Skill: Sendable, Hashable, Identifiable, Codable {
         self.body = body
         self.extensions = extensions
         self.supportingFiles = supportingFiles
-        self.codexConfiguration = codexConfiguration
+        self.configurations = configurations
+    }
+
+    // MARK: - Typed configuration access
+
+    /// Retrieve a typed configuration.
+    public func configuration<T: ConfigurationRepresentable>(_ type: T.Type) throws -> T? {
+        let key = String(describing: T.self)
+        guard let data = configurations[key] else { return nil }
+        return try T(configurationData: data)
+    }
+
+    /// Store a typed configuration, replacing any existing one.
+    public mutating func setConfiguration<T: ConfigurationRepresentable>(_ config: T?) throws {
+        let key = String(describing: T.self)
+        if let config {
+            configurations[key] = try config.configurationData()
+        } else {
+            configurations.removeValue(forKey: key)
+        }
+    }
+
+    /// Check whether a configuration of the given type is present.
+    public func hasConfiguration<T: ConfigurationRepresentable>(_ type: T.Type) -> Bool {
+        configurations[String(describing: T.self)] != nil
     }
 }

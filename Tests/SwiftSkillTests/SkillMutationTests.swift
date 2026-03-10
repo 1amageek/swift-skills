@@ -88,7 +88,7 @@ struct SkillMutationTests {
     // MARK: - Mixed mutations
 
     @Test("Claude and Codex properties coexist independently")
-    func claudeAndCodexCoexist() {
+    func claudeAndCodexCoexist() throws {
         var skill = Skill(name: "mixed", description: "Test")
 
         skill.disableModelInvocation = true
@@ -97,9 +97,10 @@ struct SkillMutationTests {
         #expect(skill.disableModelInvocation == true)
         #expect(skill.allowImplicitInvocation == false)
 
-        // Extensions and codexConfiguration are separate stores
+        // Extensions and configurations are separate stores
         #expect(skill.extensions["disable-model-invocation"] == .bool(true))
-        #expect(skill.codexConfiguration?.policy?.allowImplicitInvocation == false)
+        let codex = try skill.configuration(CodexConfiguration.self)
+        #expect(codex?.policy?.allowImplicitInvocation == false)
     }
 
     // MARK: - Standard field mutations

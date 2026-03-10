@@ -333,8 +333,9 @@ struct SkillParserEdgeCaseTests {
         try Data(codexYAML.utf8).write(to: tempDir.appending(path: "agents/openai.yaml"))
 
         let skill = try parser.parseDirectory(at: tempDir)
-        #expect(skill.codexConfiguration?.dependencies?.tools?.count == 1)
-        let tool = skill.codexConfiguration?.dependencies?.tools?.first
+        let codex = try skill.configuration(CodexConfiguration.self)
+        #expect(codex?.dependencies?.tools?.count == 1)
+        let tool = codex?.dependencies?.tools?.first
         #expect(tool?.type == "mcp")
         #expect(tool?.value == "my-server")
         #expect(tool?.transport == "streamable_http")

@@ -34,8 +34,19 @@ public struct SkillWriter: Sendable {
         }
     }
 
-    /// Write a full skill directory (SKILL.md + supporting files + optional codex config).
-    public func writeDirectory(_ skill: Skill, to url: URL) throws {
+    /// Default configuration file mappings for writing directories.
+    public static let defaultConfigurationMappings: [ConfigurationFileMapping] = ConfigurationFileMapping.defaults
+
+    /// Write a full skill directory (SKILL.md + supporting files + configurations).
+    ///
+    /// Configuration data from ``Skill/configurations`` is written to file paths
+    /// determined by the provided mappings. Configurations without a matching
+    /// mapping are skipped.
+    public func writeDirectory(
+        _ skill: Skill,
+        to url: URL,
+        configurationMappings: [ConfigurationFileMapping] = SkillWriter.defaultConfigurationMappings
+    ) throws {
         let fm = FileManager.default
 
         // Create the skill directory
@@ -61,9 +72,18 @@ public struct SkillWriter: Sendable {
             }
         }
 
-        // Write Codex configuration if present
-        if let codexConfig = skill.codexConfiguration {
-            try writeCodexConfiguration(codexConfig, in: url)
+        // Write configurations using mappings
+        let keyToPath = Dictionary(uniqueKeysWithValues: configurationMappings.map { ($0.key, $0.relativePath) })
+        for (key, data) in skill.configurations {
+            guard let relativePath = keyToPath[key] else { continue }
+            let configURL = url.appending(path: relativePath)
+            let parentDir = configURL.deletingLastPathComponent()
+            try fm.createDirectory(at: parentDir, withIntermediateDirectories: true)
+            do {
+                try data.write(to: configURL)
+            } catch {
+                throw SkillWriterError.fileWriteFailed(configURL, underlying: error)
+            }
         }
     }
 
@@ -135,29 +155,6 @@ public struct SkillWriter: Sendable {
             return .scalar(.init("null", Tag(.null)))
         default:
             return .scalar(.init(String(describing: value)))
-        }
-    }
-
-    // MARK: - Codex configuration
-
-    private func writeCodexConfiguration(_ config: CodexConfiguration, in skillDirectory: URL) throws {
-        let agentsDir = skillDirectory.appending(path: "agents")
-        let fm = FileManager.default
-        try fm.createDirectory(at: agentsDir, withIntermediateDirectories: true)
-
-        let encoder = YAMLEncoder()
-        let yamlString: String
-        do {
-            yamlString = try encoder.encode(config)
-        } catch {
-            throw SkillWriterError.serializationFailed("Codex configuration: \(error.localizedDescription)")
-        }
-
-        let url = agentsDir.appending(path: "openai.yaml")
-        do {
-            try Data(yamlString.utf8).write(to: url)
-        } catch {
-            throw SkillWriterError.fileWriteFailed(url, underlying: error)
         }
     }
 }

@@ -8,10 +8,19 @@ public struct SkillStore: Sendable {
     private let parser: SkillParser
     private let writer: SkillWriter
 
-    public init(rootURL: URL, parser: SkillParser = SkillParser(), writer: SkillWriter = SkillWriter()) {
+    /// Configuration file mappings used for directory I/O.
+    public let configurationMappings: [ConfigurationFileMapping]
+
+    public init(
+        rootURL: URL,
+        parser: SkillParser = SkillParser(),
+        writer: SkillWriter = SkillWriter(),
+        configurationMappings: [ConfigurationFileMapping] = ConfigurationFileMapping.defaults
+    ) {
         self.rootURL = rootURL
         self.parser = parser
         self.writer = writer
+        self.configurationMappings = configurationMappings
     }
 
     // MARK: - Discovery
@@ -33,7 +42,7 @@ public struct SkillStore: Sendable {
             guard fm.fileExists(atPath: skillMD.path(percentEncoded: false)) else { continue }
 
             do {
-                let skill = try parser.parseDirectory(at: dirURL)
+                let skill = try parser.parseDirectory(at: dirURL, configurationMappings: configurationMappings)
                 skills.append(skill)
             } catch {
                 // Skip malformed skills
@@ -50,7 +59,7 @@ public struct SkillStore: Sendable {
         guard FileManager.default.fileExists(atPath: skillMD.path(percentEncoded: false)) else {
             return nil
         }
-        return try parser.parseDirectory(at: dirURL)
+        return try parser.parseDirectory(at: dirURL, configurationMappings: configurationMappings)
     }
 
     /// Save a skill, creating its directory structure.
@@ -58,7 +67,7 @@ public struct SkillStore: Sendable {
     /// The skill is written to `rootURL/<skill.name>/`.
     public func save(_ skill: Skill) throws {
         let dirURL = rootURL.appending(path: skill.name, directoryHint: .isDirectory)
-        try writer.writeDirectory(skill, to: dirURL)
+        try writer.writeDirectory(skill, to: dirURL, configurationMappings: configurationMappings)
     }
 
     /// Delete a skill directory by name.

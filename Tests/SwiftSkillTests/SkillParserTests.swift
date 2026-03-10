@@ -28,7 +28,7 @@ struct SkillParserTests {
         #expect(skill.allowedTools == nil)
         #expect(skill.extensions.isEmpty)
         #expect(skill.supportingFiles.isEmpty)
-        #expect(skill.codexConfiguration == nil)
+        #expect(skill.configurations.isEmpty)
     }
 
     // MARK: - Full standard fields
@@ -392,12 +392,13 @@ struct SkillParserTests {
         try Data(codexYAML.utf8).write(to: tempDir.appending(path: "agents/openai.yaml"))
 
         let skill = try parser.parseDirectory(at: tempDir)
-        #expect(skill.codexConfiguration?.interface?.displayName == "My Skill")
-        #expect(skill.codexConfiguration?.interface?.brandColor == "#3B82F6")
-        #expect(skill.codexConfiguration?.policy?.allowImplicitInvocation == false)
+        let codex = try skill.configuration(CodexConfiguration.self)
+        #expect(codex?.interface?.displayName == "My Skill")
+        #expect(codex?.interface?.brandColor == "#3B82F6")
+        #expect(codex?.policy?.allowImplicitInvocation == false)
     }
 
-    @Test("Parse directory without Codex config leaves codexConfiguration nil")
+    @Test("Parse directory without Codex config leaves configurations empty")
     func parseDirectoryNoCodex() throws {
         let tempDir = FileManager.default.temporaryDirectory
             .appending(path: UUID().uuidString)
@@ -415,6 +416,6 @@ struct SkillParserTests {
         try Data(skillContent.utf8).write(to: tempDir.appending(path: "SKILL.md"))
 
         let skill = try parser.parseDirectory(at: tempDir)
-        #expect(skill.codexConfiguration == nil)
+        #expect(skill.configurations.isEmpty)
     }
 }
