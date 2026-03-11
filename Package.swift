@@ -18,7 +18,7 @@ let package = Package(
         ),
     ],
     dependencies: [
-        .package(url: "https://github.com/1amageek/swift-yaml.git", from: "0.1.0"),
+        .package(url: "https://github.com/1amageek/swift-yaml.git", from: "1.0.0"),
     ],
     targets: [
         .target(
