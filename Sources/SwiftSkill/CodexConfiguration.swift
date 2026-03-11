@@ -1,19 +1,71 @@
 import Foundation
-import Yams
+import YAML
 
 /// OpenAI Codex-specific configuration parsed from `agents/openai.yaml`.
 public struct CodexConfiguration: ConfigurationRepresentable {
 
     public init(configurationData data: Data) throws {
-        guard let yaml = String(data: data, encoding: .utf8) else {
+        // Try JSON first, fall back to YAML for backward compatibility
+        if let decoded = try? JSONDecoder().decode(CodexConfiguration.self, from: data) {
+            self = decoded
+            return
+        }
+        guard let yamlString = String(data: data, encoding: .utf8) else {
             throw SkillParserError.invalidEncoding
         }
-        self = try YAMLDecoder().decode(CodexConfiguration.self, from: yaml)
+        self = try Self.decodeFromYAML(yamlString)
     }
 
     public func configurationData() throws -> Data {
-        let yaml = try YAMLEncoder().encode(self)
-        return Data(yaml.utf8)
+        try JSONEncoder().encode(self)
+    }
+
+    private static func decodeFromYAML(_ yaml: String) throws -> CodexConfiguration {
+        guard let node = try compose(yaml: yaml),
+              case .mapping(let root) = node else {
+            throw SkillParserError.invalidFrontmatter("Expected YAML mapping for CodexConfiguration")
+        }
+
+        var config = CodexConfiguration()
+
+        if case .mapping(let ifMap)? = root["interface"] {
+            config.interface = Interface(
+                displayName: ifMap["display_name"]?.scalar?.string,
+                shortDescription: ifMap["short_description"]?.scalar?.string,
+                iconSmall: ifMap["icon_small"]?.scalar?.string,
+                iconLarge: ifMap["icon_large"]?.scalar?.string,
+                brandColor: ifMap["brand_color"]?.scalar?.string,
+                defaultPrompt: ifMap["default_prompt"]?.scalar?.string
+            )
+        }
+
+        if case .mapping(let polMap)? = root["policy"] {
+            if let val = polMap["allow_implicit_invocation"]?.scalar?.string {
+                config.policy = Policy(
+                    allowImplicitInvocation: val == "true" || val == "True" || val == "yes"
+                )
+            }
+        }
+
+        if case .mapping(let depMap)? = root["dependencies"] {
+            if case .sequence(let toolSeq)? = depMap["tools"] {
+                let tools: [ToolDependency] = toolSeq.compactMap { toolNode in
+                    guard case .mapping(let tMap) = toolNode,
+                          let type = tMap["type"]?.scalar?.string,
+                          let value = tMap["value"]?.scalar?.string else { return nil }
+                    return ToolDependency(
+                        type: type,
+                        value: value,
+                        description: tMap["description"]?.scalar?.string,
+                        transport: tMap["transport"]?.scalar?.string,
+                        url: tMap["url"]?.scalar?.string
+                    )
+                }
+                config.dependencies = Dependencies(tools: tools)
+            }
+        }
+
+        return config
     }
 
     /// UI display settings for the skill.

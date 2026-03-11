@@ -18,12 +18,14 @@ let package = Package(
         ),
     ],
     dependencies: [
-        .package(url: "https://github.com/jpsim/Yams.git", from: "5.0.0"),
+        .package(url: "https://github.com/1amageek/swift-yaml.git", from: "0.1.0"),
     ],
     targets: [
         .target(
             name: "SwiftSkill",
-            dependencies: ["Yams"]
+            dependencies: [
+                .product(name: "YAML", package: "swift-yaml"),
+            ]
         ),
         .testTarget(
             name: "SwiftSkillTests",

@@ -1,5 +1,5 @@
 import Foundation
-import Yams
+import YAML
 
 /// Parses SKILL.md files and skill directories into `Skill` instances.
 public struct SkillParser: Sendable {
@@ -90,15 +90,52 @@ public struct SkillParser: Sendable {
 
     private func parseFrontmatter(_ yaml: String) throws -> [String: Any] {
         do {
-            guard let result = try Yams.load(yaml: yaml) as? [String: Any] else {
+            guard let node = try compose(yaml: yaml) else {
+                throw SkillParserError.invalidFrontmatter("Empty YAML")
+            }
+            guard case .mapping(let mapping) = node else {
                 throw SkillParserError.invalidFrontmatter("Expected a YAML mapping")
             }
-            return result
+            return nodeToDict(mapping)
         } catch let error as SkillParserError {
             throw error
         } catch {
             throw SkillParserError.invalidFrontmatter(error.localizedDescription)
         }
+    }
+
+    // MARK: - Node conversion
+
+    private func nodeToDict(_ mapping: Node.Mapping) -> [String: Any] {
+        var dict = [String: Any]()
+        for (keyNode, valueNode) in mapping {
+            guard let key = keyNode.scalar?.string else { continue }
+            dict[key] = nodeToAny(valueNode)
+        }
+        return dict
+    }
+
+    private func nodeToAny(_ node: Node) -> Any {
+        switch node {
+        case .scalar(let s):
+            return inferScalarType(s.string)
+        case .mapping(let m):
+            return nodeToDict(m)
+        case .sequence(let s):
+            return s.map { nodeToAny($0) }
+        }
+    }
+
+    private func inferScalarType(_ string: String) -> Any {
+        switch string {
+        case "true", "True", "TRUE", "yes", "Yes", "YES": return true
+        case "false", "False", "FALSE", "no", "No", "NO": return false
+        case "null", "Null", "NULL", "~": return NSNull()
+        default: break
+        }
+        if let i = Int(string) { return i }
+        if string.contains("."), let d = Double(string) { return d }
+        return string
     }
 
     // MARK: - Field extraction

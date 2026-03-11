@@ -1,5 +1,4 @@
 import Foundation
-import Yams
 
 /// Serializes `Skill` instances to SKILL.md format and writes skill directories.
 public struct SkillWriter: Sendable {
@@ -90,7 +89,6 @@ public struct SkillWriter: Sendable {
     // MARK: - Frontmatter serialization
 
     private func buildFrontmatterYAML(_ skill: Skill) throws -> String {
-        // Build ordered key-value pairs for deterministic output
         var pairs: [(String, Any)] = []
 
         pairs.append(("name", skill.name))
@@ -114,47 +112,74 @@ public struct SkillWriter: Sendable {
             pairs.append((key, value.toAny))
         }
 
-        // Build a Yams Node.Mapping to preserve key order
-        let mappingPairs: [(Yams.Node, Yams.Node)] = try pairs.map { key, value in
-            let keyNode = Yams.Node.scalar(.init(key))
-            let valueNode = try yamlNode(from: value)
-            return (keyNode, valueNode)
+        var lines: [String] = []
+        for (key, value) in pairs {
+            lines.append(contentsOf: serializeKeyValue(key: key, value: value, indent: 0))
         }
+        return lines.joined(separator: "\n") + "\n"
+    }
 
-        let node = Yams.Node.mapping(.init(mappingPairs))
-        do {
-            return try Yams.serialize(node: node)
-        } catch {
-            throw SkillWriterError.serializationFailed(error.localizedDescription)
+    // MARK: - YAML serialization
+
+    private func serializeKeyValue(key: String, value: Any, indent: Int) -> [String] {
+        let prefix = String(repeating: "  ", count: indent)
+        switch value {
+        case let dict as [String: Any]:
+            var lines = ["\(prefix)\(key):"]
+            for (k, v) in dict.sorted(by: { $0.key < $1.key }) {
+                lines.append(contentsOf: serializeKeyValue(key: k, value: v, indent: indent + 1))
+            }
+            return lines
+        case let arr as [Any]:
+            var lines = ["\(prefix)\(key):"]
+            for item in arr {
+                lines.append("\(prefix)- \(serializeScalar(item))")
+            }
+            return lines
+        default:
+            return ["\(prefix)\(key): \(serializeScalar(value))"]
         }
     }
 
-    // MARK: - Yams Node conversion
-
-    private func yamlNode(from value: Any) throws -> Yams.Node {
+    private func serializeScalar(_ value: Any) -> String {
         switch value {
-        case let s as String:
-            return .scalar(.init(s))
         case let b as Bool:
-            return .scalar(.init(b ? "true" : "false", Tag(.bool)))
+            return b ? "true" : "false"
         case let i as Int:
-            return .scalar(.init(String(i), Tag(.int)))
+            return String(i)
         case let d as Double:
-            return .scalar(.init(String(d), Tag(.float)))
-        case let arr as [Any]:
-            let nodes = try arr.map { try yamlNode(from: $0) }
-            return .sequence(.init(nodes))
-        case let dict as [String: Any]:
-            let sortedPairs: [(Yams.Node, Yams.Node)] = try dict
-                .sorted(by: { $0.key < $1.key })
-                .map { key, val in
-                    (.scalar(.init(key)), try yamlNode(from: val))
-                }
-            return .mapping(.init(sortedPairs))
+            return String(d)
+        case let s as String:
+            return quoteIfNeeded(s)
         case is NSNull:
-            return .scalar(.init("null", Tag(.null)))
+            return "null"
         default:
-            return .scalar(.init(String(describing: value)))
+            return quoteIfNeeded(String(describing: value))
         }
+    }
+
+    private func quoteIfNeeded(_ string: String) -> String {
+        if string.isEmpty { return "''" }
+        let needsQuoting = string.contains(":") || string.contains("#") ||
+            string.contains("\"") || string.contains("'") ||
+            string.contains("\n") || string.contains("{") ||
+            string.contains("}") || string.contains("[") ||
+            string.contains("]") || string.contains(",") ||
+            string.contains("&") || string.contains("*") ||
+            string.contains("!") || string.contains("|") ||
+            string.contains(">") || string.contains("%") ||
+            string.contains("@") || string.contains("`") ||
+            string.hasPrefix("- ") || string.hasPrefix("? ") ||
+            string == "true" || string == "false" ||
+            string == "null" || string == "~" ||
+            string == "yes" || string == "no"
+        if needsQuoting {
+            let escaped = string
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+                .replacingOccurrences(of: "\n", with: "\\n")
+            return "\"\(escaped)\""
+        }
+        return string
     }
 }
