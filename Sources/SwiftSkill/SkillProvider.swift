@@ -20,10 +20,18 @@ public enum SkillProvider: String, Sendable, CaseIterable, Codable {
         }
     }
 
+    /// Root directory for user-level skill discovery.
+    ///
+    /// On sandboxed platforms this resolves to the app container root rather than
+    /// a desktop-style user home. That keeps discovery deterministic while
+    /// avoiding macOS-only FileManager APIs.
+    public static var personalRootURL: URL {
+        URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true)
+    }
+
     /// Personal (user-level) skills directory URL.
     public var personalSkillsURL: URL {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        return home.appending(path: skillsRelativePath, directoryHint: .isDirectory)
+        Self.personalRootURL.appending(path: skillsRelativePath, directoryHint: .isDirectory)
     }
 
     /// Project-level skills directory URL for a given project root.
@@ -47,8 +55,7 @@ public enum SkillProvider: String, Sendable, CaseIterable, Codable {
         case .codex:
             return [
                 projectRoot.appending(path: ".agents/skills", directoryHint: .isDirectory),
-                FileManager.default.homeDirectoryForCurrentUser
-                    .appending(path: ".agents/skills", directoryHint: .isDirectory),
+                personalSkillsURL,
             ]
         }
     }

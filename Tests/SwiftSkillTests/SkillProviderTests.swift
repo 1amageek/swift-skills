@@ -35,7 +35,7 @@ struct SkillProviderTests {
 
     @Test("Personal skills URL is under home directory")
     func personalURL() {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path(percentEncoded: false)
+        let home = SkillProvider.personalRootURL.path(percentEncoded: false)
         for provider in SkillProvider.allCases {
             let url = provider.personalSkillsURL
             #expect(url.path(percentEncoded: false).hasPrefix(home))
